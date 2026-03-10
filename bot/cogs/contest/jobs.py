@@ -23,13 +23,26 @@ class ContestJobs:
         async for config in self.collection.find({}):
             guild_id = config["_id"]
 
-            scheduler.add_job(self.open_submission_channel, "cron", day=2, hour=0, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.close_submission_channel, "cron", day=14, hour=23, minute=0, second = 0,  timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.post_submission_to_forum, "cron", day=14, hour=23, minute=30, second = 0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.open_voting_channel, "cron", day=16, hour=23, minute=59,second = 0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.close_voting_channel, "cron", day=23, hour=23, minute=59, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.announce_winner, "cron", day=24, hour=0, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
-            scheduler.add_job(self.close_contest, "cron", day=24, hour=22, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            # 1. Open Submissions: Monday at 00:00 (Start of the week)
+            scheduler.add_job(self.open_submission_channel, "cron", day_of_week="mon", hour=0, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 2. Close Submissions: Friday at 18:00 (6:00 PM)
+            scheduler.add_job(self.close_submission_channel, "cron", day_of_week="fri", hour=18, minute=0, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 3. Post to Voting Gallery: Friday at 18:30 (Give the bot 30 mins to process images)
+            scheduler.add_job(self.post_submission_to_forum, "cron", day_of_week="fri", hour=18, minute=30, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 4. Open Voting: Friday at 19:00 (7:00 PM)
+            scheduler.add_job(self.open_voting_channel, "cron", day_of_week="fri", hour=19, minute=0, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 5. Close Voting: Sunday at 20:00 (8:00 PM)
+            scheduler.add_job(self.close_voting_channel, "cron", day_of_week="sun", hour=20, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 6. Announce Winner: Sunday at 21:00 (9:00 PM)
+            scheduler.add_job(self.announce_winner, "cron", day_of_week="sun", hour=21, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            
+            # 7. Close Everything: Sunday at 23:00 (Final cleanup before Monday)
+            scheduler.add_job(self.close_contest, "cron", day_of_week="sun", hour=23, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
 
     async def open_submission_channel(self, guild_id: int = None):
         submission_channel = await get_submission_channel(self.bot, guild_id= guild_id)
