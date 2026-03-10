@@ -84,7 +84,7 @@ class ContestCommands(commands.Cog):
     async def contest_start_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.jobs_logic import start_submissions
+            from bot.cogs.contest.jobs import start_submissions
             await start_submissions()
             await ctx.send("🚀 **Contest Forced!** Submissions are now open.")
         except Exception as e:
@@ -95,7 +95,7 @@ class ContestCommands(commands.Cog):
     async def contest_vote_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.jobs_logic import start_voting
+            from bot.cogs.contest.jobs import start_voting
             await start_voting()
             await ctx.send("🗳️ Submissions closed. Voting gallery is now live!")
         except Exception as e:
@@ -106,7 +106,7 @@ class ContestCommands(commands.Cog):
     async def contest_winner_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.jobs_logic import announce_winner
+            from bot.cogs.contest.jobs import announce_winner
             await announce_winner()
             await ctx.send("🏆 Votes counted! Winner has been announced.")
         except Exception as e:
