@@ -26,20 +26,24 @@ class ContestManager(commands.Cog):
         logs_channel = await get_logs_channel(self.bot, guild_id=guild_id)
         submission_channel = await get_submission_channel(self.bot, message.guild.id)
 
-        def log_to_logs_channel(title, description, color=discord.Color.default(), image=None):
+        # FIX 1: Make this function 'async def'
+        async def log_to_logs_channel(title, description, color=discord.Color.default(), image=None):
             if logs_channel:
                 embed = create_logs_embed(
                     title=title,
                     description=description,
                     color=color,
                     image=image,
+                    # Added avatar.url check to prevent errors if user has no avatar
                     thumbnails=message.author.avatar.url if message.author.avatar else None
                 )
-                return logs_channel.send(embed=embed)
+                # FIX 2: Use 'await' here
+                return await logs_channel.send(embed=embed)
             return None
 
         if not submission_channel:
-            log_to_logs_channel(
+            # FIX 3: Added 'await' to all calls below
+            await log_to_logs_channel(
                 title="Submission Channel Not Configured",
                 description=f"{message.author.mention} attempted to submit but the submission channel is not set.\nUse `/contest_submission_channel` to set it.",
                 color=discord.Color.red()
@@ -47,7 +51,7 @@ class ContestManager(commands.Cog):
             return
 
         if message.channel.id != submission_channel.id:
-            log_to_logs_channel(
+            await log_to_logs_channel(
                 title="Invalid Submission Location",
                 description=f"{message.author.mention} tried to submit in <#{message.channel.id}> instead of <#{submission_channel.id}>.",
                 color=discord.Color.orange()
@@ -55,7 +59,7 @@ class ContestManager(commands.Cog):
             return
 
         if not attachment:
-            log_to_logs_channel(
+            await log_to_logs_channel(
                 title="No Attachment Found",
                 description=f"{message.author.mention} submitted a message without an image attachment.",
                 color=discord.Color.orange()
@@ -75,14 +79,14 @@ class ContestManager(commands.Cog):
             await resize_and_save_image(image_bytes, output_path)
             print(f"Saved image for {user_id} at {output_path}")
         except Exception as e:
-            log_to_logs_channel(
+            await log_to_logs_channel(
                 title="Image Processing Failed",
                 description=f"{message.author.mention} submitted an image, but it couldn't be resized.\nError: `{str(e)}`",
                 color=discord.Color.red()
             )
             return
 
-        log_to_logs_channel(
+        await log_to_logs_channel(
             title="New Contest Submission",
             description=f"{message.author.mention} submitted an image for the contest.",
             color=discord.Color.green(),
@@ -102,5 +106,3 @@ class ContestManager(commands.Cog):
             "file_path": db_path,
             "message_id": message.id
         })
-
-
