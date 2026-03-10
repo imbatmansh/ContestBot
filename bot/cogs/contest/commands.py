@@ -182,7 +182,48 @@ class ContestCommands(commands.Cog):
             await ctx.send(f"<#{channel.id}> is set as bot log channel")
         except Exception as e:
             await ctx.send(f"Error: {e}")
+@commands.hybrid_command(name="contest_start_now", description="Force-start a contest cycle immediately")
+    @commands.has_permissions(administrator=True)
+    async def contest_start_now(self, ctx: commands.Context):
+        await ctx.defer()
+        try:
+            from bot.jobs_logic import start_submissions
+            await start_submissions()
+            
+            logs_channel = await get_logs_channel(self.bot, guild_id=ctx.guild.id)
+            if logs_channel:
+                await logs_channel.send(
+                    embed=create_logs_embed(
+                        title="Manual Contest Start",
+                        description=f"Contest started manually by {ctx.author.mention}",
+                        color=discord.Color.gold()
+                    )
+                )
+            await ctx.send("🚀 **Contest Forced!** Submissions are now open.")
+        except Exception as e:
+            await ctx.send(f"❌ Error during start-up: {e}")
 
+    @commands.hybrid_command(name="contest_vote_now", description="Force-start the voting phase immediately")
+    @commands.has_permissions(administrator=True)
+    async def contest_vote_now(self, ctx: commands.Context):
+        await ctx.defer()
+        try:
+            from bot.jobs_logic import start_voting
+            await start_voting()
+            await ctx.send("🗳️ Submissions closed. Voting gallery is now live!")
+        except Exception as e:
+            await ctx.send(f"❌ Error: {e}")
+
+    @commands.hybrid_command(name="contest_winner_now", description="Force-end the contest and announce winner")
+    @commands.has_permissions(administrator=True)
+    async def contest_winner_now(self, ctx: commands.Context):
+        await ctx.defer()
+        try:
+            from bot.jobs_logic import announce_winner
+            await announce_winner()
+            await ctx.send("🏆 Votes counted! Winner has been announced.")
+        except Exception as e:
+            await ctx.send(f"❌ Error: {e}")
     @commands.hybrid_command(name="contest_create_channel", description="Create contest channel")
     async def contest_create_channel(self, ctx: commands.Context):
         await ctx.defer()
