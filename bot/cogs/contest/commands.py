@@ -84,8 +84,12 @@ class ContestCommands(commands.Cog):
     async def contest_start_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.cogs.contest.jobs import start_submissions
-            await start_submissions()
+            # We look for the Jobs class inside this Cog
+            from bot.cogs.contest.jobs import ContestJobs
+            jobs = ContestJobs(self)
+            
+            # Run the specific function from your jobs.py
+            await jobs.open_submission_channel(guild_id=ctx.guild.id)
             await ctx.send("🚀 **Contest Forced!** Submissions are now open.")
         except Exception as e:
             await ctx.send(f"❌ Error during start-up: {e}")
@@ -95,8 +99,14 @@ class ContestCommands(commands.Cog):
     async def contest_vote_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.cogs.contest.jobs import start_voting
-            await start_voting()
+            from bot.cogs.contest.jobs import ContestJobs
+            jobs = ContestJobs(self)
+            
+            # First we close submissions, then open voting
+            await jobs.close_submission_channel(guild_id=ctx.guild.id)
+            await jobs.post_submission_to_forum(guild_id=ctx.guild.id)
+            await jobs.open_voting_channel(guild_id=ctx.guild.id)
+            
             await ctx.send("🗳️ Submissions closed. Voting gallery is now live!")
         except Exception as e:
             await ctx.send(f"❌ Error: {e}")
@@ -106,8 +116,12 @@ class ContestCommands(commands.Cog):
     async def contest_winner_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.cogs.contest.jobs import announce_winner
-            await announce_winner()
+            from bot.cogs.contest.jobs import ContestJobs
+            jobs = ContestJobs(self)
+            
+            await jobs.close_voting_channel(guild_id=ctx.guild.id)
+            await jobs.announce_winner(guild_id=ctx.guild.id)
+            
             await ctx.send("🏆 Votes counted! Winner has been announced.")
         except Exception as e:
             await ctx.send(f"❌ Error: {e}")
