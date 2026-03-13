@@ -27,13 +27,13 @@ class ContestJobs:
             scheduler.add_job(self.open_submission_channel, "cron", day_of_week="mon", hour=0, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
             
             # 2. Close Submissions: Friday at 18:00 (6:00 PM)
-            scheduler.add_job(self.close_submission_channel, "cron", day_of_week="fri", hour=18, minute=0, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            scheduler.add_job(self.close_submission_channel, "cron", day_of_week="fri", hour=23, minute=30, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
             
             # 3. Post to Voting Gallery: Friday at 18:30 (Give the bot 30 mins to process images)
-            scheduler.add_job(self.post_submission_to_forum, "cron", day_of_week="fri", hour=18, minute=30, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            scheduler.add_job(self.post_submission_to_forum, "cron", day_of_week="fri", hour=23, minute=59, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
             
             # 4. Open Voting: Friday at 19:00 (7:00 PM)
-            scheduler.add_job(self.open_voting_channel, "cron", day_of_week="fri", hour=19, minute=0, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
+            scheduler.add_job(self.open_voting_channel, "cron", day_of_week="sat", hour=0, minute=1, second=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
             
             # 5. Close Voting: Sunday at 20:00 (8:00 PM)
             scheduler.add_job(self.close_voting_channel, "cron", day_of_week="sun", hour=20, minute=0, timezone=GMT_TIMEZONE, kwargs={"guild_id": guild_id})
