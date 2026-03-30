@@ -1,8 +1,27 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-from bot.cogs.contest.utils import get_logs_channel
+from bot.cogs.contest.utils import get_logs_channel, set_contest_archive_channel
 from bot.core.error_embed import create_logs_embed
+
+class ArchiveConfirmation(discord.ui.View):
+    """A simple confirmation view to prevent accidental wipes."""
+    def __init__(self):
+        super().__init__(timeout=30)
+        self.value = None
+
+    @discord.ui.button(label="Confirm Archive & Wipe", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.value = True
+        self.stop()
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.value = False
+        self.stop()
+        await interaction.response.defer()
 
 class ContestCommands(commands.Cog):
     def __init__(self, bot):
@@ -51,6 +70,16 @@ class ContestCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error: {e}")
 
+    @commands.hybrid_command(name="contest_archive_channel", description="Select the channel where results are archived")
+    @commands.has_permissions(administrator=True)
+    async def contest_archive_channel(self, ctx: commands.Context, channel: discord.TextChannel):
+        await ctx.defer()
+        try:
+            await set_contest_archive_channel(self.bot, ctx.guild.id, channel.id)
+            await ctx.send(f"✅ <#{channel.id}> is now set as the archive channel.")
+        except Exception as e:
+            await ctx.send(f"❌ Error setting archive channel: {e}")
+
     @commands.hybrid_command(name="contest_role", description="Select contest role")
     async def contest_role(self, ctx: commands.Context, *, role: discord.Role = None):
         await ctx.defer()
@@ -79,18 +108,39 @@ class ContestCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error: {e}")
 
+    @commands.hybrid_command(name="contest_force_archive", description="Immediately end contest, archive files, and WIPE DB")
+    @commands.has_permissions(administrator=True)
+    async def contest_force_archive(self, ctx: commands.Context):
+        view = ArchiveConfirmation()
+        msg = await ctx.send("⚠️ **WARNING**: This will immediately end the contest, move images to folders, and **permanently wipe** the current submission database. Proceed?", view=view)
+        
+        await view.wait()
+        if view.value is None:
+            await msg.edit(content="Timed out.", view=None)
+        elif view.value:
+            await msg.edit(content="🚀 Processing archive and wipe...", view=None)
+            try:
+                # Access the jobs logic from the manager cog
+                manager = self.bot.get_cog("ContestManager")
+                if manager:
+                    await manager.jobs.close_contest(guild_id=ctx.guild.id)
+                    await ctx.send("✅ Archive complete. Database is now empty for a fresh start.")
+                else:
+                    await ctx.send("❌ Error: ContestManager cog not found.")
+            except Exception as e:
+                await ctx.send(f"❌ Error during force archive: {e}")
+        else:
+            await msg.edit(content="Archive cancelled.", view=None)
+
     @commands.hybrid_command(name="contest_start_now", description="Force-start a contest cycle immediately")
     @commands.has_permissions(administrator=True)
     async def contest_start_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            # We look for the Jobs class inside this Cog
-            from bot.cogs.contest.jobs import ContestJobs
-            jobs = ContestJobs(self)
-            
-            # Run the specific function from your jobs.py
-            await jobs.open_submission_channel(guild_id=ctx.guild.id)
-            await ctx.send("🚀 **Contest Forced!** Submissions are now open.")
+            manager = self.bot.get_cog("ContestManager")
+            if manager:
+                await manager.jobs.open_submission_channel(guild_id=ctx.guild.id)
+                await ctx.send("🚀 **Contest Forced!** Submissions are now open.")
         except Exception as e:
             await ctx.send(f"❌ Error during start-up: {e}")
 
@@ -99,15 +149,12 @@ class ContestCommands(commands.Cog):
     async def contest_vote_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.cogs.contest.jobs import ContestJobs
-            jobs = ContestJobs(self)
-            
-            # First we close submissions, then open voting
-            await jobs.close_submission_channel(guild_id=ctx.guild.id)
-            await jobs.post_submission_to_forum(guild_id=ctx.guild.id)
-            await jobs.open_voting_channel(guild_id=ctx.guild.id)
-            
-            await ctx.send("🗳️ Submissions closed. Voting gallery is now live!")
+            manager = self.bot.get_cog("ContestManager")
+            if manager:
+                await manager.jobs.close_submission_channel(guild_id=ctx.guild.id)
+                await manager.jobs.post_submission_to_forum(guild_id=ctx.guild.id)
+                await manager.jobs.open_voting_channel(guild_id=ctx.guild.id)
+                await ctx.send("🗳️ Submissions closed. Voting gallery is now live!")
         except Exception as e:
             await ctx.send(f"❌ Error: {e}")
 
@@ -116,13 +163,11 @@ class ContestCommands(commands.Cog):
     async def contest_winner_now(self, ctx: commands.Context):
         await ctx.defer()
         try:
-            from bot.cogs.contest.jobs import ContestJobs
-            jobs = ContestJobs(self)
-            
-            await jobs.close_voting_channel(guild_id=ctx.guild.id)
-            await jobs.announce_winner(guild_id=ctx.guild.id)
-            
-            await ctx.send("🏆 Votes counted! Winner has been announced.")
+            manager = self.bot.get_cog("ContestManager")
+            if manager:
+                await manager.jobs.close_voting_channel(guild_id=ctx.guild.id)
+                await manager.jobs.announce_winner(guild_id=ctx.guild.id)
+                await ctx.send("🏆 Votes counted! Winner has been announced.")
         except Exception as e:
             await ctx.send(f"❌ Error: {e}")
 
@@ -130,10 +175,7 @@ class ContestCommands(commands.Cog):
     async def contest_create_channel(self, ctx: commands.Context):
         await ctx.defer()
         guild = ctx.guild
-        bot_member = guild.me
         server_config = await self.collection.find_one({"_id": guild.id})
-        
-        # Simplified logic for creating the category and channels
         contest_category = discord.utils.get(guild.categories, name="Contest") or await guild.create_category("Contest")
         
         async def create_chan(name, cls):
