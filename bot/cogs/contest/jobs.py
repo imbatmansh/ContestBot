@@ -133,31 +133,61 @@ class ContestJobs:
                     await announcement_channel.send(embed=embed)
 
     async def close_contest(self, guild_id: int = None):
-        """CLEANUP: Archives files and Wipes Database."""
-        # 1. Setup Archive Folder
-        timestamp = datetime.now(GMT_TIMEZONE).strftime("%Y-Week-%W")
-        archive_path = Path(f"bot/data/archive/{guild_id}/{timestamp}")
-        archive_path.mkdir(parents=True, exist_ok=True)
-        
-        # 2. MOVE files from submissions to archive
-        sub_folder = Path(f"bot/data/submissions/{guild_id}")
-        if sub_folder.exists():
-            for f in sub_folder.iterdir():
-                try:
-                    shutil.move(str(f), str(archive_path / f.name))
-                except Exception as e:
-                    print(f"Archive error: {e}")
-
-        # 3. DELETE Forum threads
+        """Archives files to Discord AND local storage, then wipes DB."""
+        guild = self.bot.get_guild(guild_id)
         voting_channel = await get_voting_channel(self.bot, guild_id=guild_id)
-        if voting_channel:
-            for thread in voting_channel.threads:
-                await thread.delete()
+        art_archive_channel = await get_contest_archive_channel(self.bot, guild_id=guild_id)
+        
+        if not voting_channel or not art_archive_channel:
+            print(f"Missing channels for archive: Voting={voting_channel}, Archive={art_archive_channel}")
+            return
 
-        # 4. THE FIX: Clear the database collection for this guild
-        # This is what stops last week's photos from being resubmitted!
+        # 1. Setup Local Archive Path for Railway Volume
+        timestamp = datetime.now(GMT_TIMEZONE).strftime("%Y-Week-%W")
+        local_archive_path = Path(f"bot/data/archive/{guild_id}/{timestamp}")
+        local_archive_path.mkdir(parents=True, exist_ok=True)
+        
+        # 2. Process each thread in the voting channel
+        for thread in voting_channel.threads:
+            try:
+                user_data = await self.submissions_collection.find_one({"thread_id": thread.id})
+                if not user_data: continue
+                
+                user = guild.get_member(user_data["user_id"])
+                if not user: continue
+
+                # Get the image from the thread
+                async for msg in thread.history(limit=1, oldest_first=True):
+                    if msg.attachments:
+                        attachment = msg.attachments[0]
+                        # Create the DISCORD archive post
+                        file = await get_discord_file_from_url(attachment.url, attachment.filename)
+                        await art_archive_channel.send(
+                            content=f"🎨 **Archive Entry**: {user.mention}\n📈 **Total Votes**: {sum(r.count for r in msg.reactions)}",
+                            file=file
+                        )
+
+                # 3. Delete the thread after archiving to Discord
+                await thread.delete()
+            except Exception as e:
+                print(f"Error archiving thread {thread.name}: {e}")
+
+        # 4. Move local files to the Archive Volume
+        submission_folder = Path(f"bot/data/submissions/{guild_id}")
+        if submission_folder.exists():
+            for file_item in submission_folder.iterdir():
+                try:
+                    shutil.move(str(file_item), str(local_archive_path / file_item.name))
+                except Exception as e:
+                    print(f"Local move error: {e}")
+
+        # 5. FINAL STEP: Wipe the DB so Monday is fresh
         await self.submissions_collection.delete_many({"guild_id": guild_id})
         
         logs_channel = await get_logs_channel(self.bot, guild_id=guild_id)
         if logs_channel:
-            await logs_channel.send(embed=create_logs_embed(title="Weekly Reset Complete", description="Database wiped. Bot is ready for Monday.", color=discord.Color.purple()))
+            await logs_channel.send(embed=create_logs_embed(
+                title="Weekly Archive Success", 
+                description="Contest data has been moved to the archive channel and local storage wiped.", 
+                color=discord.Color.green()
+            ))
